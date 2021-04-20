@@ -1,4 +1,4 @@
-# Market-basket-analysis
+# Market Basket Analysis
 
 ## Introduction
 
