@@ -1,0 +1,238 @@
+---
+title: "Market Basket Analysis"
+author: "Jabir Kangarli"
+date: 
+output: html_document
+---
+
+# Introduction 
+
+Association rule learning is a rule-based machine learning method for discovering interesting relations between variables in large databases. It is intended to identify strong rules discovered in databases using some measures of interestingness.[1]
+
+Based on the concept of strong rules, Rakesh Agrawal, Tomasz Imieliński and Arun Swami[2] introduced association rules for discovering regularities between products in large-scale transaction data recorded by point-of-sale (POS) systems in supermarkets. For example, the rule {onions,potatoes}={burger},  {onions,potatoes}={burger} found in the sales data of a supermarket would indicate that if a customer buys onions and potatoes together, they are likely to also buy hamburger meat. Such information can be used as the basis for decisions about marketing activities such as, e.g., promotional pricing or product placements.
+
+In addition to the above example from market basket analysis association rules are employed today in many application areas including Web usage mining, intrusion detection, continuous production, and bioinformatics. In contrast with sequence mining, association rule learning typically does not consider the order of items either within a transaction or across transactions.
+
+*https://en.wikipedia.org/wiki/Association_rule_learning*
+
+## Uploading needed packages and the dataset
+```{r}
+# install.packages("arules")
+# install.packages("arulesViz")
+# install.packages("arulesCBA")
+library(arules)
+library(arulesViz)
+library(arulesCBA)
+# data
+data <- read.transactions("~\\db\\testdata.csv", sep = ",") # you may see the reference to the dataset in the    source part at the end.
+summary(data)
+```
+
+As it is seen, we have 2001 rows and 164 columns which stand for various transactions and products accordingly. In absolute values, we see that whole milk is most popular than other products.
+```{r}
+inspect(data)
+```
+
+By using ```inspect()``` we can check transactions one by one. For instance, transaction number 5 contains only pastry and 6 contains only waffles and so on. 
+
+```{r}
+size(data)
+
+length(data)
+```
+
+```size() ``` function shows us how many products are bought in every transaction from the beginning till the end, and the ```length()``` stands for the size of the dataset.
+
+# Applying basic statistics 
+```{r}
+itemFrequency(data, type="relative")
+itemFrequency(data, type="absolute")
+```
+
+There are 2001 rows, and these rows refer to the store transactions, and 164 columns are features for each of the 164 different items that might appear in someone's grocery basket. Each cell in the matrix is a 1 if the item was purchased for the corresponding transaction, or 0 otherwise. The density value of 0.02714192 (2.7 percent) refers to the proportion of non-zero matrix cells. Since there are 2001 * 164 = 328164 positions in the matrix, we can calculate that a total of 328164 * 0.02714192 = 8907 items were purchased within a month in the store.
+
+The average transaction contained 8907 / 2001  = 4.4513 different grocery items. The function lists the items that were most commonly found in the transactional data as 511 / 2001 = 0.2554, we can determine that whole milk appeared in 25.5 percent of transactions.
+
+The total of 432 transactions contained only a single item, while one transaction had 25 items. Moreover, first quartile and median purchase size are 2 and 3 items accordingly.
+
+Let's take a look at the contents of a sparse matrix 
+```{r}
+inspect(data[1:10])
+```
+
+Also, let's check the support level for the first ten items in the grocery data, and it corresponds to the relative frequency of these products.
+```{r}
+itemFrequency(data[, 1:10])
+```
+
+As we can see, the items in the sparse matrix are sorted in columns by alphabetical order.
+
+I set the minimum support at 0.1 in order transactions to be present in this plot.
+```{r}
+itemFrequencyPlot(data, support = 0.1)
+```
+
+And we may limit the plot to a specific number of items to see relative frequency again but here it is more readable since the products are ranked.
+```{r}
+itemFrequencyPlot(data, topN = 15)
+```
+
+Now, we have to visualize the sparse matrix for the first 5 items. 
+```{r}
+image(data[1:5])
+```
+
+Here, 5 transactions and 164 possible items we requested. On the vertical part, we see transactions in rows, and various items listed in columns was purchased. Also it may help with investigation of the distribution of various products across your dataset and thanks to that, you may identify some issues in your data. For example, when particular columns that are filled with black could mean that the item in every transaction. So every customer adds this item to his/her basket.
+
+This visualization could be especially powerful if the items were also sorted into categories. This kind of information is redundant.It will not be as useful for extremely large transaction databases because the cells will be too small to discern.
+
+We will use sampling by random selection of 100 transactions
+```{r}
+image(sample(data, 100))
+```
+
+# Apriori
+
+We will try to find the association rules using the apriori algorithm and I set the support at 0.6% which is very low and confidence at 25%, minimum length of a rule is 2 elements.
+```{r}
+data.rules <- apriori(data, parameter = list(support = 0.006, confidence = 0.25, minlen = 2))
+data.rules
+
+summary(data.rules)
+```
+
+We see here set of 501 rules and from the distribution, association rules contain two elements in the left handside and one element in the right handside. We will check the specific rules by using ```inspect()```
+````{r}
+inspect(data.rules[1:10])
+```
+
+By inspecting the data, it appears that if you buy herbs, it may increase the probability of buying root vegetables and we have support, lift, and count indexes based on the results. Then, we sort the rules by lift, confidence, support, and count so that we are able to inspect the most meaningful ones
+```{r}
+inspect(sort(data.rules, by = "lift")[1:5])
+
+inspect(sort(data.rules, by = "confidence")[1:5])
+
+inspect(sort(data.rules, by = "support")[1:5])
+
+inspect(sort(data.rules, by = "count")[1:5])
+```
+
+I want to find what drives people to buy root vegetables?
+```{r}
+rules.rootveg<-apriori(data=data, parameter=list(supp=0.01,conf = 0.005), 
+                       appearance=list(default="lhs", rhs="root vegetables"), control=list(verbose=F)) 
+rules.rootveg.byconf<-sort(rules.rootveg, by="confidence", decreasing=TRUE)
+inspect(head(rules.rootveg.byconf))
+```
+
+On the opposite, what would be consequences if I added root vegetable to my basket? But this is a little bit less popular than other business issues.
+```{r}
+rules.rootvegopp<-apriori(data=data, parameter=list(supp=0.01,conf = 0.005), 
+                          appearance=list(default="rhs", lhs="root vegetables"), control=list(verbose=F)) 
+rules.rootvegopp.byconf<-sort(rules.rootvegopp, by="confidence", decreasing=TRUE)
+inspect(head(rules.rootvegopp.byconf))
+```
+
+We will take a look at specific product, meaning ham
+```{r}
+hamrules <- subset(data.rules, items %in% "ham")
+inspect(hamrules)
+```
+
+Now, let's use some plots. Firstly we need to download arulesViz package
+```{r}
+#install.packages("arulesViz")
+library(arulesViz)
+itemFrequencyPlot(data, topN=10, type="absolute", main="Item Frequency") 
+itemFrequencyPlot(data, topN=10, type="relative", main="Item Frequency")
+```
+```{r}
+plot(data.rules)
+```
+
+In this case, we have our confidence level stated in the vertical axis, and support is in the horizontal one. The color of the dots corresponds to the level of lift.
+
+```{r}
+plot(rules.rootveg)
+```
+
+If we check the rules regarding the root vegetables, we see that we only have 25 rules for root vegetables.
+```{r}
+plot(data.rules, method="matrix", measure="lift")
+```
+
+```{r}
+plot(data.rules, measure=c("support","lift"), shading="confidence")
+```
+
+In this plot, we switched the lift to the vertical axis and red dots corresponds to the confidence level. 
+```{r}
+plot(data.rules, shading="order", control=list(main="Two-key plot"))
+```
+
+```{r}
+plot(data.rules, method="grouped")
+```
+
+```{r}
+plot(rules.rootveg, method="grouped")
+```
+
+To make our plot more readable, we narrow down one exact product on the right handside, root vegetables. We just reduce this matrix to the signle line with dots and it is way more easy to read.
+```{r}
+plot(data.rules, method="graph")
+```
+
+```{r}
+plot(rules.rootveg, method="graph")
+```
+
+In this plot, we may find out what products lead buying the root vegetables. Size stands for the support level and color is for lift.
+```{r}
+plot(rules.rootveg, method="paracoord", control=list(reorder=TRUE))
+```
+
+Paralel coordinates plot is also a kind of a plot that we should care about when doing an association rules. We may see that root vegetables are on the right handside and products that leaded to buy root vegetables. The more the red line is, the stronger rule.
+
+# the ECLAT algorithm
+```{r}
+freq.items<-eclat(data, parameter=list(supp=0.006, maxlen=15)) 
+inspect(freq.items)
+```
+
+Now we will use basic statistics with reference to confidence
+```{r}
+freq.rules<-ruleInduction(freq.items, data, confidence=0.5)
+freq.rules
+```
+
+Here we see how to develop basic statistics with reference to confidence
+```{r}
+freq.items<-eclat(data, parameter=list(supp=0.05, maxlen=15)) 
+inspect(freq.items)
+freq.rules<-ruleInduction(freq.items, data, confidence=0.1)
+freq.rules
+inspect(freq.rules)
+```
+
+and how to inspect some frequent rules that satisfies our support at the level of 5 per cent and ten per cent of confidence. And we have an output for that. The results leaded me to the Whole milk with the support of 0.0529, and confidence and lift by 0.3557 and 1.3928 respectively. 
+
+To save the output 
+```{r}
+write(data.rules, file = "datarules.csv", sep = ",", quote = TRUE, row.names = FALSE)
+```
+
+Or if you want to save it as data.frame
+```{r}
+datarules_df <- as(data.rules, "data.frame")
+```
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+Sources:
+
+1. Jacek Lewkowicz. Unsupervised Learning classes & presentations
+
+2. Dataset: *https://www.kaggle.com/apmonisha08/market-basket-analysis* - test.xlsx file
